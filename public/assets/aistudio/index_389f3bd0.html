@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8C%AB%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<title>Urban Air Quality Assistant</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+<h1>🌫️ Urban Air Quality Assistant</h1>
+<p class="sub">Tell us about your area and household. Get a low-emission daily plan, indoor air tips and greener swaps, with the reason behind each one.</p>
+
+<section class="card">
+  <div class="grid">
+    <div><label for="city">City / neighbourhood</label><input type="text" id="city" placeholder="e.g. Lucknow, Gomti Nagar"><div style="margin-top:6px"><button class="ghost" id="loc" type="button" style="padding:6px 12px;font-size:.85rem">📍 Use my location</button> <span class="small" id="locNote"></span></div></div>
+    <div><label for="commute">Main commute</label>
+      <select id="commute"><option>Private car</option><option>Two-wheeler</option><option>Auto/cab</option><option>Bus/metro</option><option>Walk/cycle</option><option>Work from home</option></select></div>
+    <div><label for="cook">Cooking / heating at home</label>
+      <select id="cook"><option>LPG</option><option>Induction/electric</option><option>Firewood/coal/cow-dung cakes</option><option>Electric heater/geyser</option><option>Gas heater</option></select></div>
+    <div><label for="purifier">Indoor air equipment</label>
+      <select id="purifier"><option>None</option><option>Air purifier (HEPA)</option><option>Exhaust fan only</option><option>Indoor plants only</option></select></div>
+    <div><label for="budget">Budget for changes</label>
+      <select id="budget"><option>Free / very low</option><option selected>Moderate</option><option>Flexible</option></select></div>
+  </div>
+  <div style="margin-top:14px">
+    <label for="aqi">Today’s AQI near you (check a local app or CPCB)</label>
+    <div class="aqi"><input type="range" id="aqi" min="0" max="500" value="320"><span class="badge" id="badge"></span><b id="aqiv"></b></div>
+    <p class="small" id="live" hidden></p>
+  </div>
+  <div style="margin-top:14px">
+    <label>Who is in your household?</label>
+    <div class="chips" id="who">
+      <label><input type="checkbox" value="young children"> Young children</label>
+      <label><input type="checkbox" value="older adults"> Older adults</label>
+      <label><input type="checkbox" value="asthma or other lung conditions"> Asthma / lung condition</label>
+      <label><input type="checkbox" value="heart conditions"> Heart condition</label>
+      <label><input type="checkbox" value="pregnancy"> Pregnancy</label>
+      <label><input type="checkbox" value="outdoor workers"> Outdoor workers</label>
+    </div>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button id="go">Build my personalised plan</button>
+    <span class="small" id="note"></span>
+  </div>
+</section>
+
+<section class="card" id="quick">
+  <h2 style="margin-top:0;font-size:1.15rem">Right now at this AQI</h2>
+  <div class="qa" id="qa"></div>
+</section>
+
+<section class="card" id="aiCard" hidden>
+  <h2 style="margin-top:0;font-size:1.15rem">Your personalised plan</h2>
+  <div id="out"></div>
+  <div class="row"><input type="text" id="q" placeholder="Ask a follow-up, e.g. “Is it safe for my son to play outside?”"><button class="ghost" id="ask">Ask</button></div>
+  <p class="warn">General guidance only, not medical advice. If anyone has trouble breathing, chest pain, or worsening symptoms, contact a doctor.</p>
+</section>
+
+<section class="card">
+  <h2 style="margin-top:0;font-size:1.15rem">Why your choices matter</h2>
+  <div class="impact">
+    <div><b>Car → metro, bus or carpool</b><br>Fewer vehicles means less exhaust and road dust. Traffic is a major local source of fine particles (PM2.5) in cities, so each swapped trip helps your own street air.</div>
+    <div><b>Not burning waste or leaves</b><br>Open burning releases dense smoke at ground level where families breathe it. <em>Skipping a single burn</em> removes a source right next to your home.</div>
+    <div><b>Induction or LPG instead of wood or coal</b><br>Solid-fuel cooking is one of the largest sources of indoor PM2.5. Cleaner fuel lowers exposure for the person cooking and everyone indoors.</div>
+    <div><b>Ventilating at the right time</b><br>Air is usually worst in early morning and late evening in winter. Airing rooms at midday dilutes indoor pollutants without letting in the peak.</div>
+    <div><b>Well-fitted N95/FFP2 mask</b><br>Cloth and surgical masks barely stop fine particles. A snug N95 filters most of them, but only if sealed against the face.</div>
+    <div><b>Sharing what you learn</b><br>Smog is a shared problem. Neighbours who skip burning, use cleaner fuel and avoid idling add up to cleaner air for the whole lane.</div>
+  </div>
+</section>
+</main>
+
+<script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Urban Air Quality Assistant",
+  "description": "Live local AQI readings, immediate protective actions, and personalised low-emission daily plans for households navigating urban smog.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
