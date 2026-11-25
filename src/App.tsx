@@ -27,6 +27,26 @@ import {
 } from "./lib/aqi";
 import { MarkdownRenderer } from "./components/MarkdownRenderer";
 import { SymptomLog } from "./components/SymptomLog";
+import { fetchOpenMeteoAqi } from "./lib/liveAqiClient";
+
+const STATIC_HOST_PLAN_NOTE =
+  "AI plan generation isn’t active on this static host yet. To enable it on Netlify, deploy the repository (which includes netlify.toml and netlify/functions/) and add GEMINI_API_KEY in Site configuration > Environment variables. Live AQI, quick actions, and the symptom log continue working without it.";
+
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.status === 404 || contentType.includes("text/html")) {
+    return STATIC_HOST_PLAN_NOTE;
+  }
+  if (contentType.includes("application/json")) {
+    try {
+      const data = (await response.json()) as { error?: string };
+      if (data?.error) return data.error;
+    } catch {
+      // Fall through to fallback
+    }
+  }
+  return fallback;
+}
 
 interface ChatTurn {
   role: "user" | "model";
@@ -156,26 +176,16 @@ export default function App() {
     setLocationError("");
 
     try {
-      const qs = new URLSearchParams();
-      if (typeof params.lat === "number" && typeof params.lng === "number") {
-        qs.set("lat", String(params.lat));
-        qs.set("lng", String(params.lng));
-      } else if (params.city?.trim()) {
-        qs.set("city", params.city.trim());
-      } else {
+      if (
+        (typeof params.lat !== "number" || typeof params.lng !== "number") &&
+        !params.city?.trim()
+      ) {
         setLocationError("Enter a city name or use your device location first.");
         setAqiLoading(false);
         return;
       }
 
-      const response = await fetch(`./api/aqi?${qs.toString()}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Couldn’t fetch live air quality right now.");
-      }
-
-      const reading = data as LiveAqiReading;
+      const reading = await fetchOpenMeteoAqi(params);
       setLiveReading(reading);
       setAqi(reading.aqi);
       setCoords({ lat: reading.location.lat, lng: reading.location.lng });
@@ -271,10 +281,10 @@ export default function App() {
         body: JSON.stringify(buildProfilePayload()),
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!response.ok || contentType.includes("text/html")) {
         throw new Error(
-          errData?.error || "Unable to generate your personalised plan right now."
+          await readApiError(response, "Unable to generate your personalised plan right now.")
         );
       }
 
@@ -317,9 +327,11 @@ export default function App() {
         }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData?.error || "Couldn’t answer right now. Please try again.");
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!response.ok || contentType.includes("text/html")) {
+        throw new Error(
+          await readApiError(response, "Couldn’t answer right now. Please try again.")
+        );
       }
 
       await consumeSSEStream(response, (text) => {

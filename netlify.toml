@@ -1,0 +1,30 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/plan"
+  to = "/.netlify/functions/plan"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/followup"
+  to = "/.netlify/functions/followup"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/aqi"
+  to = "/.netlify/functions/aqi"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
