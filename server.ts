@@ -9,7 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const IS_PROD = process.env.NODE_ENV === "production";
+const DIST_PATH = path.resolve(__dirname, "dist");
+const IS_RUNNING_VIA_TSX = process.execArgv.some((arg) => arg.includes("tsx"));
+const USE_STATIC_DIST =
+  process.env.NODE_ENV === "production" ||
+  (!IS_RUNNING_VIA_TSX && fs.existsSync(path.join(DIST_PATH, "index.html")));
 
 const PLAN_SYSTEM_INSTRUCTION = `You are an urban air quality assistant for families in cities facing severe winter smog and urban air pollution. Using the household profile, give practical, specific, compassionate advice.
 
@@ -195,21 +199,43 @@ function computeSubIndex(value: number | null | undefined, table: Breakpoint[]):
 
 function extractErrorMessage(err: unknown): { status: number; message: string } {
   const raw = err instanceof Error ? err.message : String(err);
-  if (raw.includes("API_KEY_INVALID") || raw.includes("403") || raw.includes("PERMISSION_DENIED")) {
+  const statusProp =
+    typeof err === "object" && err !== null && "status" in err
+      ? Number((err as { status?: unknown }).status)
+      : NaN;
+
+  if (
+    statusProp === 403 ||
+    raw.includes("API_KEY_INVALID") ||
+    raw.includes("403") ||
+    raw.includes("PERMISSION_DENIED")
+  ) {
     return {
       status: 403,
       message: "Gemini API key was rejected. Please verify your API key in Settings > Secrets.",
     };
   }
-  if (raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED")) {
+  if (statusProp === 404 || raw.includes("404") || raw.includes("NOT_FOUND")) {
+    return {
+      status: 404,
+      message: `Model endpoint returned 404: ${raw.slice(0, 200)}`,
+    };
+  }
+  if (statusProp === 429 || raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED")) {
     return {
       status: 429,
       message: "Too many requests right now. Please wait a moment and try again.",
     };
   }
+  if (statusProp === 400 || raw.includes("400") || raw.includes("INVALID_ARGUMENT")) {
+    return {
+      status: 400,
+      message: `Invalid request to AI service: ${raw.slice(0, 200)}`,
+    };
+  }
   return {
     status: 500,
-    message: "Unable to generate the personalised plan right now. Please try again shortly.",
+    message: `Unable to generate the personalised plan right now (${raw.slice(0, 160)}).`,
   };
 }
 
@@ -224,9 +250,33 @@ function sendSSE(res: express.Response, payload: Record<string, unknown>) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+async function openGeminiStreamWithRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const { status } = extractErrorMessage(err);
+      // Do not retry client/auth/not-found errors
+      if (status === 400 || status === 403 || status === 404) {
+        throw err;
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: "256kb" }));
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true, mode: USE_STATIC_DIST ? "static" : "vite-dev" });
+  });
 
   // GET /api/aqi?lat=...&lng=... OR /api/aqi?city=...
   app.get("/api/aqi", async (req, res) => {
@@ -484,17 +534,20 @@ async function startServer() {
     }
 
     const profileText = buildProfilePrompt(body);
-    initSSE(res);
 
     try {
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-4-hydrogen",
-        contents: `Household profile:\n${profileText}`,
-        config: {
-          systemInstruction: PLAN_SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        },
-      });
+      const stream = await openGeminiStreamWithRetry(() =>
+        ai.models.generateContentStream({
+          model: "gemini-4-hydrogen",
+          contents: `Household profile:\n${profileText}`,
+          config: {
+            systemInstruction: PLAN_SYSTEM_INSTRUCTION,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
+        })
+      );
+
+      initSSE(res);
 
       let fullText = "";
       for await (const chunk of stream) {
@@ -509,9 +562,13 @@ async function startServer() {
       res.end();
     } catch (err) {
       console.error("Plan generation error:", err);
-      const { message } = extractErrorMessage(err);
-      sendSSE(res, { type: "error", error: message });
-      res.end();
+      const { status, message } = extractErrorMessage(err);
+      if (res.headersSent) {
+        sendSSE(res, { type: "error", error: message });
+        res.end();
+      } else {
+        res.status(status).json({ error: message });
+      }
     }
   });
 
@@ -571,17 +628,19 @@ async function startServer() {
       },
     ];
 
-    initSSE(res);
-
     try {
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-4-hydrogen",
-        contents,
-        config: {
-          systemInstruction: FOLLOWUP_SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        },
-      });
+      const stream = await openGeminiStreamWithRetry(() =>
+        ai.models.generateContentStream({
+          model: "gemini-4-hydrogen",
+          contents,
+          config: {
+            systemInstruction: FOLLOWUP_SYSTEM_INSTRUCTION,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
+        })
+      );
+
+      initSSE(res);
 
       let fullText = "";
       for await (const chunk of stream) {
@@ -596,17 +655,25 @@ async function startServer() {
       res.end();
     } catch (err) {
       console.error("Follow-up error:", err);
-      const { message } = extractErrorMessage(err);
-      sendSSE(res, { type: "error", error: message });
-      res.end();
+      const { status, message } = extractErrorMessage(err);
+      if (res.headersSent) {
+        sendSSE(res, { type: "error", error: message });
+        res.end();
+      } else {
+        res.status(status).json({ error: message });
+      }
     }
   });
 
-  if (IS_PROD) {
-    const distPath = path.resolve(__dirname, "dist");
-    app.use(express.static(distPath));
+  // Explicit JSON 404 for unknown API routes so they never fall through to SPA HTML
+  app.all("/api/*", (_req, res) => {
+    res.status(404).json({ error: "API endpoint not found." });
+  });
+
+  if (USE_STATIC_DIST) {
+    app.use(express.static(DIST_PATH));
     app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      res.sendFile(path.join(DIST_PATH, "index.html"));
     });
   } else {
     const { createServer: createViteServer } = await import("vite");

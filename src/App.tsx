@@ -168,7 +168,7 @@ export default function App() {
         return;
       }
 
-      const response = await fetch(`/api/aqi?${qs.toString()}`);
+      const response = await fetch(`./api/aqi?${qs.toString()}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -265,7 +265,7 @@ export default function App() {
     planSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
     try {
-      const response = await fetch("/api/plan", {
+      const response = await fetch("./api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildProfilePayload()),
@@ -306,7 +306,7 @@ export default function App() {
     setFollowUps([...priorHistory, userTurn, assistantPlaceholder]);
 
     try {
-      const response = await fetch("/api/followup", {
+      const response = await fetch("./api/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
